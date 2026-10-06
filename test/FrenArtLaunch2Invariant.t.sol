@@ -24,8 +24,8 @@ contract Launch2CallHandler is Test {
     function callChunk(uint256 chunkSeed, uint256 actorSeed, uint256 amountSeed, bytes calldata payload) external {
         uint256 c = bound(chunkSeed, 0, 1);
         uint256 a = bound(actorSeed, 0, 2);
-        uint256 limit = actors[a].balance < 1 ether ? actors[a].balance : 1 ether;
-        uint256 amount = bound(amountSeed, 0, limit);
+        // Allow full-balance calls so random sequences can reach an empty actor.
+        uint256 amount = bound(amountSeed, 0, actors[a].balance);
         bytes memory data = payload[:(payload.length < 512 ? payload.length : 512)];
         _record();
         vm.prank(actors[a]);
@@ -124,6 +124,28 @@ contract FrenArtLaunch2InvariantTest is Test {
     }
 
     /// @dev Fixed edges complement random sequences and exercise every handler branch.
+    function test_FullBalanceThenEmptyActorCallsConserveEth() public {
+        for (uint256 a; a < 3; ++a) {
+            address actor = handler.actors(a);
+            uint256 firstChunk = a % 2;
+            handler.callChunk(firstChunk, a, actor.balance / 2, hex"");
+            handler.callChunk(1 - firstChunk, a, actor.balance, hex"deadbeef");
+            assertEq(actor.balance, 0, "full-balance call did not exhaust actor");
+            assertEq(handler.spent(a), handler.INITIAL_BALANCE());
+
+            for (uint256 c; c < 2; ++c) {
+                handler.insufficientFundsCall(c, a); // One wei from an empty actor must fail.
+                handler.callChunk(c, a, 0, hex"");
+                handler.staticProbe(c, a, hex"ffffffff");
+                invariant_RuntimeRemainsExactAfterEveryCallSequence();
+                invariant_EthConservedAcrossActorsAndBothChunks();
+            }
+        }
+        assertEq(handler.successfulCalls(), 12);
+        assertEq(handler.failedCalls(), 6);
+        assertEq(handler.staticCalls(), 6);
+    }
+
     function test_EmptyCalldataSelectorsAndValueEdges() public {
         for (uint256 c; c < 2; ++c) {
             handler.callChunk(c, 0, 0, hex"");
