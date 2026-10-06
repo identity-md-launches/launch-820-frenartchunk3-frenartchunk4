@@ -135,3 +135,51 @@ Revision checks, using Forge 1.8.3 and solc 0.8.26:
 - Verified the response JSON has exactly one entry for every supplied finding,
   checked the diff for whitespace errors, and compared source/test/configuration
   fingerprints to the revision's starting tree. Those files remain unchanged.
+
+## Revision: settlement finding 533e8020b8a9
+
+The current reopened finding
+`533e8020b8a9690fe07a444508865a783aaecdc54860334a652acbf853b9ff16`
+reproduces and remains an admission blocker. It is disputed only as a required
+local repair: zero rejected positions and the explicitly required unchanged art
+bytes cannot both hold under the supplied scanner. The preceding policy/scope
+decision is still required; no approved exception was supplied in this revision.
+
+Changes in this revision:
+
+- `.imd-responses.json`: added the required machine-readable answer for the reopened
+  finding and each of the five imported audit entries. The responses distinguish
+  reproduced but disputed repairs, the gas correction already present in the
+  starting tree, and the informational coverage entry.
+- `ADAPTATION.md`: added this revision's evidence and disposition. No implementation,
+  generated art, test, configuration, dependency, manifest, or pinned input changed.
+
+Checks with Forge 1.8.3 and solc 0.8.26:
+
+- Both supplied proofs were copied unchanged under `test/scratch/` and run with
+  `forge test --offline --out test/scratch/out --cache-path test/scratch/cache
+  --match-path 'test/scratch/Proof_*.t.sol' -vv`. Both fail at chunk 4 with
+  `234 != 0`; the settlement proof logs the first rejected position at 3912.
+- The unchanged protected test was run with the factory, chain ID, compiled
+  creation code, salts and predicted addresses recorded in the preceding revision.
+  Both constructors succeed, then count 2 fails with `forbidden application opcode`;
+  count 1 (chunk 3 alone) passes. The proofs and protected copy were then retained
+  as scratch `.fixture` files so the ordinary project suite can run separately.
+  This does not resolve or hide the failed admission checks.
+- An independent scan of the generated literals confirms chunk 3 has zero rejected
+  positions, chunk 4 has 234, and chunk 7 has 14 (first at 7671).
+- `forge build` and `forge test -vv` pass; all 11 existing tests pass, including
+  exact runtime/hash checks, constructor value rejection, the documented ETH sink,
+  chunk 7's reproduced blocker and renderer equivalence.
+- `forge test --isolate --match-test test_LaunchesFitTransactions -vv` passes with
+  the same budgets as the default run: 12,622,872 / 11,738,744 / 15,536,192 gas.
+  The reported 940,916 gas undercount no longer reproduces in the accepted test.
+- Response IDs/schema, source/test/configuration/dependency fingerprints and
+  `git diff --check` were checked. No RPC, broadcast, keys, new dependency,
+  Slither or Mythril were used.
+
+The reopened report describes another tree with 25 tests and a launch manifest.
+The supplied starting tree has 11 tests, including the existing scanner-rejection
+reproductions, and no `launch.json`. Those artifacts were preserved as supplied;
+this revision does not recreate another contributor's changes. Passing the project
+suite does not establish launch admission, which remains blocked.
