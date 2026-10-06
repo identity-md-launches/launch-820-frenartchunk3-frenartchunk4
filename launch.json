@@ -1,0 +1,14 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "FrenArtChunk3",
+      "constructorArgs": []
+    },
+    {
+      "contract": "FrenArtChunk4",
+      "constructorArgs": []
+    }
+  ],
+  "notes": "Part 2 of 3 of the IMD6900 Frens on-chain art: deploy FrenArtChunk3, then FrenArtChunk4 from src/FrenArtChunks.sol, with no constructor arguments. Preserve their exact STOP-prefixed art runtime bytes and the code hashes required by src/FrenArtIndex.sol. Neither contract has an owner or requires initialization. The remaining chunks and renderer belong to launches 1 and 3. Admission remains blocked by the supplied protected scanner, which scans unreachable art data after STOP and rejects bytes in FrenArtChunk4; this manifest does not resolve that policy conflict."
+}
