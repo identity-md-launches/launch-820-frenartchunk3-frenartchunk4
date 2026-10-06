@@ -41,23 +41,58 @@ contract FrenArtLaunch2Test is Test {
         }
     }
 
-    /// @dev This reproduces the admission blocker, not a passing launch-policy check. Art bytes must stay exact.
-    function test_ExactLaunch2ArtIsRejectedByCurrentProtectedScan() public view {
-        (uint256 count3,) = _scan(chunk3.code);
-        (uint256 count4, uint256 first4) = _scan(chunk4.code);
-        assertEq(count3, 0);
-        assertEq(count4, 234);
-        assertEq(first4, 3912);
-        assertEq(uint8(chunk4.code[first4]), 0xf4);
+    // Admission-scan failures are reported in .imd-findings.json with a failing proof,
+    // rather than requiring the known blocker to persist in a passing regression test.
+
+    /// forge-config: default.fuzz.runs = 1000
+    function testFuzz_NonzeroDeploymentValueRollsBackAndSaltCanBeRetried(uint256 valueSeed, uint256 saltSeed) public {
+        uint256 amount = bound(valueSeed, 1, type(uint256).max);
+        bytes32 salt = bytes32(bound(saltSeed, 5, type(uint256).max));
+        _rejectValueAndRetry(3, amount, salt);
+        _rejectValueAndRetry(4, amount, salt);
     }
 
-    /// @dev Audit finding for launch 3, reproduced without regenerating its art or hashes.
-    function test_Chunk7AlsoHasTheReportedAdmissionBlocker() public {
-        address chunk7 = factory.deploy(_initCode(7), bytes32(uint256(7)));
-        (uint256 count, uint256 first) = _scan(chunk7.code);
-        assertEq(count, 14);
-        assertEq(first, 7671);
-        assertEq(uint8(chunk7.code[first]), 0xf2);
+    function test_DeploymentValueBoundaries() public {
+        for (uint256 n = 3; n <= 4; ++n) {
+            _rejectValueAndRetry(n, 1, bytes32(uint256(100)));
+            _rejectValueAndRetry(n, type(uint256).max, bytes32(uint256(101)));
+        }
+    }
+
+    function test_DuplicateCreate2CannotReplaceEitherChunk() public {
+        uint64 nonceBefore = vm.getNonce(address(factory));
+        for (uint256 n = 3; n <= 4; ++n) {
+            bytes memory code = _initCode(n);
+            vm.expectRevert(bytes("application constructor failed"));
+            factory.deploy{gas: 8_000_000}(code, bytes32(n));
+        }
+        assertEq(vm.getNonce(address(factory)), nonceBefore, "failed factory call must roll back its nonce");
+        test_Launch2PreservesExactRuntimeAndFactoryAddresses();
+    }
+
+    function test_SameSaltForDifferentChunksProducesDistinctCorrectAddresses() public {
+        bytes32 salt = bytes32(uint256(102));
+        address third = factory.deploy(_initCode(3), salt);
+        address fourth = factory.deploy(_initCode(4), salt);
+        assertNotEq(third, fourth);
+        assertEq(third, computeCreate2Address(salt, keccak256(_initCode(3)), address(factory)));
+        assertEq(fourth, computeCreate2Address(salt, keccak256(_initCode(4)), address(factory)));
+        assertEq(third.codehash, chunk3.codehash);
+        assertEq(fourth.codehash, chunk4.codehash);
+    }
+
+    function test_ZeroValueDeploymentWorksAtPrefundedAddresses() public {
+        for (uint256 n = 3; n <= 4; ++n) {
+            bytes memory code = _initCode(n);
+            bytes32 salt = bytes32(uint256(103));
+            address predicted = computeCreate2Address(salt, keccak256(code), address(factory));
+            vm.deal(predicted, 1 ether);
+            assertEq(predicted.code.length, 0);
+            address deployed = factory.deploy(code, salt);
+            assertEq(deployed, predicted);
+            assertEq(deployed.balance, 1 ether);
+            assertEq(deployed.codehash, (n == 3 ? chunk3 : chunk4).codehash);
+        }
     }
 
     /// @dev STOP succeeds even with value. Preserving these data contracts preserves this documented ETH sink.
@@ -82,6 +117,24 @@ contract FrenArtLaunch2Test is Test {
         return vm.getCode(string.concat("FrenArtChunks.sol:FrenArtChunk", vm.toString(n)));
     }
 
+    function _rejectValueAndRetry(uint256 n, uint256 amount, bytes32 salt) private {
+        bytes memory code = _initCode(n);
+        address predicted = computeCreate2Address(salt, keccak256(code), address(factory));
+        uint64 nonceBefore = vm.getNonce(address(factory));
+        vm.deal(address(this), amount);
+
+        vm.expectRevert(bytes("application constructor failed"));
+        factory.deploy{value: amount}(code, salt);
+
+        assertEq(predicted.code.length, 0, "failed constructor left runtime");
+        assertEq(predicted.balance, 0, "failed constructor retained value");
+        assertEq(address(this).balance, amount, "deployment value not refunded");
+        assertEq(address(factory).balance, 0, "factory retained value");
+        assertEq(vm.getNonce(address(factory)), nonceBefore, "factory nonce not rolled back");
+        assertEq(factory.deploy(code, salt), predicted, "failed attempt consumed salt");
+        assertEq(predicted.codehash, (n == 3 ? chunk3 : chunk4).codehash);
+    }
+
     function _checkChunk(address chunk, uint256 n, uint256 size, bytes32 hash) private view {
         bytes memory code = _initCode(n);
         assertLe(code.length, 49_152);
@@ -101,20 +154,5 @@ contract FrenArtLaunch2Test is Test {
         assertEq(hash, indexedHash);
         bytes memory sizes = FrenArtIndex.CHUNK_SIZES;
         assertEq(size, uint256(uint8(sizes[(n - 1) * 2])) * 256 + uint8(sizes[(n - 1) * 2 + 1]));
-    }
-
-    /// @dev The supplied protected floor's exact traversal, including PUSH immediates and bytes after STOP.
-    function _scan(bytes memory code) private pure returns (uint256 count, uint256 first) {
-        for (uint256 j; j < code.length; ++j) {
-            uint8 op = uint8(code[j]);
-            if (op >= 0x60 && op <= 0x7f) {
-                j += op - 0x5f;
-                continue;
-            }
-            if (op == 0xf4 || op == 0xf2 || op == 0xff) {
-                if (count == 0) first = j;
-                ++count;
-            }
-        }
     }
 }
