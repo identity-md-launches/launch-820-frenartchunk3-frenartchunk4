@@ -1,0 +1,14 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "FrenArtChunk3",
+      "constructorArgs": []
+    },
+    {
+      "contract": "FrenArtChunk4",
+      "constructorArgs": []
+    }
+  ],
+  "notes": "Part 2 of 3 of the IMD6900 Frens on-chain art: deploy FrenArtChunk3, then FrenArtChunk4 from src/FrenArtChunks.sol, with no constructor arguments. Preserve their exact STOP-prefixed art runtime bytes and the code hashes required by src/FrenArtIndex.sol. Neither contract has constructor dependencies, an owner, or initialization calls. Deployment sends zero ETH. Launch 1 contains FrenArtChunk1 and FrenArtChunk2; launch 3 contains FrenArtChunk5, FrenArtChunk6, FrenArtChunk7 and FrenRenderer. The supplied protected runtime check fails because its linear scanner treats unreachable art data after STOP as instructions: it flags 234 bytes in FrenArtChunk4, first at runtime byte offset 3912 (0xf4). Resolving this check requires a review of the protected scanner outside this manifest-only task; changing the required art bytes or omitting either chunk would violate the approved deployment."
+}
