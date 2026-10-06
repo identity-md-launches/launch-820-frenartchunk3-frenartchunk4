@@ -95,6 +95,31 @@ contract FrenArtLaunch2Test is Test {
         }
     }
 
+    function test_RejectedDeploymentPreservesPrefundingAndCanBeRetried() public {
+        for (uint256 n = 3; n <= 4; ++n) {
+            bytes memory code = _initCode(n);
+            bytes32 salt = bytes32(uint256(104));
+            address predicted = computeCreate2Address(salt, keccak256(code), address(factory));
+            vm.deal(predicted, 1 ether);
+            vm.deal(address(this), 1 wei);
+            uint64 nonceBefore = vm.getNonce(address(factory));
+
+            vm.expectRevert(bytes("application constructor failed"));
+            factory.deploy{value: 1 wei}(code, salt);
+
+            assertEq(predicted.code.length, 0, "failed constructor left runtime");
+            assertEq(vm.getNonce(predicted), 0, "failed constructor left a creation nonce");
+            assertEq(predicted.balance, 1 ether, "failed constructor changed prefunding");
+            assertEq(address(this).balance, 1 wei, "deployment value not refunded");
+            assertEq(address(factory).balance, 0, "factory retained value");
+            assertEq(vm.getNonce(address(factory)), nonceBefore, "factory nonce not rolled back");
+
+            assertEq(factory.deploy(code, salt), predicted, "failed attempt consumed salt");
+            assertEq(predicted.balance, 1 ether, "retry changed prefunding");
+            assertEq(predicted.codehash, (n == 3 ? chunk3 : chunk4).codehash);
+        }
+    }
+
     /// @dev STOP succeeds even with value. Preserving these data contracts preserves this documented ETH sink.
     function test_Launch2RetainsDocumentedEthSink() public {
         vm.deal(address(this), 2 ether);
