@@ -3,6 +3,9 @@
 The on-chain art of the 2222 [IMD6900 Frens](https://imd6900.pages.dev) and the renderer that draws them, packed so the
 IMD swarm can deploy them with IMD's `evm_contracts` launch: constructors only, static arguments, nothing called after.
 
+Launch 2 currently fails the supplied admission scan because it treats some art bytes after STOP as forbidden opcodes.
+The exact art is preserved; see [ADAPTATION.md](ADAPTATION.md) for the reproduced blocker and validation results.
+
 - `src/FrenArtChunks.sol`: `FrenArtChunk1..7`, data contracts. Each one's code is a STOP byte (calling it does nothing)
   followed by up to 24,575 bytes of art: 69 layers (13 faces per character, 3 lab coats, 2 hats, 15 items,
   10 backgrounds) and a 256-colour palette, 141.6 KB in all.
@@ -27,8 +30,9 @@ launch with a renderer of their own; once this one is deployed and checked on ch
 - `test_MatchesTheReference`: bitmaps identical to the art kit's reference renderer (`expected.json`);
 - `test_SameAsTheLaunchRenderer`: byte for byte the same `tokenURI`, `pendingURI`, attributes and canvases as the
   renderer the frens launch with (`test/ref/FrenRendererRef.sol`);
-- `test_LaunchesFitTransactions`: each of the three launches below fits one transaction under EIP-7825's cap
-  (2^24 gas): about 10.7M, 9.8M and 13.7M gas with calldata;
+- `test_LaunchesFitTransactions`: a size-based gas budget for each launch under 95% of the 2^24 transaction cap,
+  including CREATE costs, runtime code deposit, initcode calldata and a 2M execution allowance per launch;
+  the deployment service must still simulate the actual factory transaction;
 - `test_TakesOnlyThisArt`: the renderer refuses other chunks, or these in another order.
 
 ## The three launches (`evm_contracts`, Ethereum mainnet)
